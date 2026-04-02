@@ -2,6 +2,9 @@ const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
+// 允许自签名证书（用于开发环境）
+app.commandLine.appendSwitch('ignore-certificate-errors');
+
 const CONFIG_FILE = path.join(app.getPath('userData'), 'config.json');
 
 let mainWindow;
