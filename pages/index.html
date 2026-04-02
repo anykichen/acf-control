@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ACF上线过账系统</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Microsoft YaHei', sans-serif;
+      background: #f5f5f5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 15px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .header .user-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .header .user-name {
+      font-weight: 500;
+    }
+    .header button {
+      background: rgba(255,255,255,0.2);
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .header button:hover {
+      background: rgba(255,255,255,0.3);
+    }
+    .main {
+      flex: 1;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+    }
+    .input-section {
+      background: white;
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .input-section label {
+      display: block;
+      margin-bottom: 10px;
+      color: #333;
+      font-weight: 500;
+    }
+    .input-wrapper {
+      display: flex;
+      gap: 10px;
+    }
+    .input-wrapper input {
+      flex: 1;
+      padding: 15px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 18px;
+      font-family: 'Consolas', monospace;
+    }
+    .input-wrapper input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    .input-wrapper button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 15px 30px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .input-wrapper button:hover {
+      opacity: 0.9;
+    }
+    .records-section {
+      flex: 1;
+      background: white;
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      display: flex;
+      flex-direction: column;
+    }
+    .records-title {
+      font-weight: 500;
+      color: #333;
+      margin-bottom: 15px;
+    }
+    .records-list {
+      flex: 1;
+      overflow-y: auto;
+      max-height: 300px;
+    }
+    .record-item {
+      padding: 10px 15px;
+      border-radius: 5px;
+      margin-bottom: 8px;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .record-item.success {
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+    .record-item.error {
+      background: #ffebee;
+      color: #c62828;
+    }
+    .record-item.warning {
+      background: #fff3e0;
+      color: #ef6c00;
+    }
+    .record-item .time {
+      color: #999;
+      font-size: 12px;
+    }
+    .footer {
+      background: white;
+      padding: 15px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 1px solid #e0e0e0;
+    }
+    .footer .count {
+      color: #666;
+    }
+    .footer .count span {
+      font-weight: 500;
+      color: #667eea;
+    }
+    .loading {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.3);
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+    .loading.show {
+      display: flex;
+    }
+    .loading-spinner {
+      width: 50px;
+      height: 50px;
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #667eea;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="user-info">
+      <span>👤 操作员：</span>
+      <span class="user-name" id="userName">-</span>
+    </div>
+    <button onclick="logout()">退出</button>
+  </div>
+  
+  <div class="main">
+    <div class="input-section">
+      <label for="lotInput">LOT号（扫码或输入）</label>
+      <div class="input-wrapper">
+        <input type="text" id="lotInput" placeholder="扫描条码或输入LOT号" autofocus>
+        <button onclick="do上线()">上线</button>
+      </div>
+    </div>
+    
+    <div class="records-section">
+      <div class="records-title">操作记录（最近20条）</div>
+      <div class="records-list" id="recordsList"></div>
+    </div>
+  </div>
+  
+  <div class="footer">
+    <div class="count">今日上线：<span id="todayCount">0</span> 条</div>
+    <div class="count">总计：<span id="totalCount">0</span> 条</div>
+  </div>
+  
+  <div class="loading" id="loading">
+    <div class="loading-spinner"></div>
+  </div>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+    let config = {};
+    let records = [];
+    let todayCount = 0;
+    let totalCount = 0;
+    
+    async function init() {
+      config = await ipcRenderer.invoke('get-config');
+      
+      if (config.user) {
+        document.getElementById('userName').textContent = 
+          config.user.real_name || config.user.username || '未知';
+      }
+      
+      document.getElementById('lotInput').focus();
+      await loadRecords();
+    }
+    
+    async function loadRecords() {
+      try {
+        const response = await fetch(`${config.serverUrl}/api/issue/records?limit=50`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          const today = new Date().toISOString().split('T')[0];
+          const todayRecords = data.data.filter(r => 
+            r.上线_time && r.上线_time.startsWith(today)
+          );
+          
+          todayCount = todayRecords.length;
+          totalCount = data.data.filter(r => r.上线_time).length;
+          
+          document.getElementById('todayCount').textContent = todayCount;
+          document.getElementById('totalCount').textContent = totalCount;
+        }
+      } catch (err) {
+        console.error('加载记录失败:', err);
+      }
+    }
+    
+    async function do上线() {
+      const lotNo = document.getElementById('lotInput').value.trim();
+      
+      if (!lotNo) {
+        addRecord('warning', '请输入LOT号');
+        playSound('error');
+        return;
+      }
+      
+      showLoading(true);
+      
+      try {
+        const response = await fetch(`${config.serverUrl}/api/issue/records?limit=50`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include'
+        });
+        
+        const data = await response.json();
+        
+        if (!data.success) {
+          throw new Error(data.message || '获取发料记录失败');
+        }
+        
+        const issue = data.data.find(r => 
+          r.lot_no === lotNo && r.status === 'out' && !r.上线_time
+        );
+        
+        if (!issue) {
+          const existingIssue = data.data.find(r => r.lot_no === lotNo);
+          if (existingIssue && existingIssue.上线_time) {
+            addRecord('warning', `${lotNo} 已上线`);
+            playSound('error');
+          } else {
+            addRecord('error', `${lotNo} 未找到发料记录`);
+            playSound('error');
+          }
+          showLoading(false);
+          document.getElementById('lotInput').value = '';
+          document.getElementById('lotInput').focus();
+          return;
+        }
+        
+        const 上线Response = await fetch(`${config.serverUrl}/api/issue/online`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            issue_id: issue.id,
+            operator: config.user?.real_name || config.user?.username || '未知'
+          })
+        });
+        
+        const 上线Data = await 上线Response.json();
+        
+        if (上线Data.success) {
+          addRecord('success', `${lotNo} 上线成功`);
+          playSound('success');
+          todayCount++;
+          totalCount++;
+          document.getElementById('todayCount').textContent = todayCount;
+          document.getElementById('totalCount').textContent = totalCount;
+        } else {
+          addRecord('error', `${lotNo} 上线失败: ${上线Data.message}`);
+          playSound('error');
+        }
+      } catch (err) {
+        addRecord('error', `操作失败: ${err.message}`);
+        playSound('error');
+      }
+      
+      showLoading(false);
+      document.getElementById('lotInput').value = '';
+      document.getElementById('lotInput').focus();
+    }
+    
+    function addRecord(type, message) {
+      const now = new Date();
+      const time = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      
+      records.unshift({ type, message, time });
+      
+      if (records.length > 20) {
+        records.pop();
+      }
+      
+      renderRecords();
+    }
+    
+    function renderRecords() {
+      const list = document.getElementById('recordsList');
+      list.innerHTML = records.map(r => `
+        <div class="record-item ${r.type}">
+          <span>${r.type === 'success' ? '✅' : r.type === 'error' ? '❌' : '⚠️'}</span>
+          <span>${r.message}</span>
+          <span class="time">${r.time}</span>
+        </div>
+      `).join('');
+    }
+    
+    function playSound(type) {
+      try {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        if (type === 'success') {
+          oscillator.frequency.value = 800;
+          oscillator.type = 'sine';
+          gainNode.gain.value = 0.3;
+        } else {
+          oscillator.frequency.value = 300;
+          oscillator.type = 'square';
+          gainNode.gain.value = 0.2;
+        }
+        
+        oscillator.start();
+        setTimeout(() => oscillator.stop(), 150);
+      } catch (err) {
+        console.error('播放声音失败:', err);
+      }
+    }
+    
+    function showLoading(show) {
+      document.getElementById('loading').classList.toggle('show', show);
+    }
+    
+    async function logout() {
+      await ipcRenderer.invoke('logout');
+    }
+    
+    document.getElementById('lotInput').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        do上线();
+      }
+    });
+    
+    ipcRenderer.on('play-sound', (event, type) => {
+      playSound(type);
+    });
+    
+    init();
+  </script>
+</body>
+</html>
