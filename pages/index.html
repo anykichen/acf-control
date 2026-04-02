@@ -93,6 +93,108 @@
     .input-wrapper button:hover {
       opacity: 0.9;
     }
+    .call-btn {
+      background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+      margin-top: 10px;
+      width: 100%;
+    }
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.5);
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+    .modal-overlay.show {
+      display: flex;
+    }
+    .modal {
+      background: white;
+      border-radius: 10px;
+      padding: 20px;
+      width: 90%;
+      max-width: 400px;
+    }
+    .modal-title {
+      font-size: 18px;
+      font-weight: 500;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    .modal-form {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+    .modal-form label {
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 5px;
+    }
+    .modal-form input, .modal-form select {
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      font-size: 16px;
+    }
+    .modal-buttons {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .modal-buttons button {
+      flex: 1;
+      padding: 12px;
+      border: none;
+      border-radius: 5px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    .modal-buttons .cancel-btn {
+      background: #f5f5f5;
+      color: #666;
+    }
+    .modal-buttons .confirm-btn {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    .notification {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: white;
+      border-radius: 10px;
+      padding: 15px 20px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+      z-index: 2000;
+      display: none;
+      max-width: 300px;
+    }
+    .notification.show {
+      display: block;
+      animation: slideIn 0.3s ease;
+    }
+    .notification.success {
+      border-left: 4px solid #4caf50;
+    }
+    .notification.info {
+      border-left: 4px solid #2196f3;
+    }
+    .notification.warning {
+      border-left: 4px solid #ff9800;
+    }
+    .notification.error {
+      border-left: 4px solid #f44336;
+    }
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
     .records-section {
       flex: 1;
       background: white;
@@ -197,6 +299,7 @@
         <input type="text" id="lotInput" placeholder="扫描条码或输入LOT号" autofocus>
         <button onclick="do上线()">上线</button>
       </div>
+      <button class="call-btn" onclick="showCallModal()">📦 呼叫备料</button>
     </div>
     
     <div class="records-section">
@@ -213,6 +316,60 @@
   <div class="loading" id="loading">
     <div class="loading-spinner"></div>
   </div>
+  
+  <!-- 呼叫备料弹窗 -->
+  <div class="modal-overlay" id="callModal">
+    <div class="modal">
+      <div class="modal-title">📦 呼叫备料</div>
+      <div class="modal-form">
+        <div>
+          <label>料号（扫码或输入）</label>
+          <input type="text" id="callPartNo" placeholder="扫描或输入料号">
+        </div>
+        <div>
+          <label>LOT号（可选）</label>
+          <input type="text" id="callLotNo" placeholder="可选">
+        </div>
+        <div>
+          <label>数量（卷）</label>
+          <input type="number" id="callQty" value="1" min="1">
+        </div>
+        <div>
+          <label>产线位置</label>
+          <select id="callLinePos">
+            <option value="线体A-站位1">线体A-站位1</option>
+            <option value="线体A-站位2">线体A-站位2</option>
+            <option value="线体A-站位3">线体A-站位3</option>
+            <option value="线体B-站位1">线体B-站位1</option>
+            <option value="线体B-站位2">线体B-站位2</option>
+            <option value="线体B-站位3">线体B-站位3</option>
+            <option value="线体C-站位1">线体C-站位1</option>
+            <option value="线体C-站位2">线体C-站位2</option>
+          </select>
+        </div>
+        <div>
+          <label>优先级</label>
+          <select id="callPriority">
+            <option value="normal">普通</option>
+            <option value="urgent">紧急</option>
+          </select>
+        </div>
+        <div>
+          <label>备注</label>
+          <input type="text" id="callNote" placeholder="可选">
+        </div>
+      </div>
+      <div class="modal-buttons">
+        <button class="cancel-btn" onclick="hideCallModal()">取消</button>
+        <button class="confirm-btn" onclick="submitCall()">确认呼叫</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- 通知弹窗 -->
+  <div class="notification" id="notification">
+    <div id="notificationContent"></div>
+  </div>
 
   <script>
     const { ipcRenderer } = require('electron');
@@ -220,6 +377,7 @@
     let records = [];
     let todayCount = 0;
     let totalCount = 0;
+    let sseConnection = null;
     
     async function init() {
       config = await ipcRenderer.invoke('get-config');
@@ -231,6 +389,112 @@
       
       document.getElementById('lotInput').focus();
       await loadRecords();
+      connectSSE();
+    }
+    
+    function connectSSE() {
+      if (!config.serverUrl) return;
+      
+      const url = config.serverUrl + '/api/call/stream';
+      sseConnection = new EventSource(url);
+      
+      sseConnection.onopen = function() {
+        console.log('SSE 连接成功');
+      };
+      
+      sseConnection.onerror = function(err) {
+        console.error('SSE 连接错误:', err);
+        setTimeout(connectSSE, 5000);
+      };
+      
+      sseConnection.addEventListener('call_accepted', function(e) {
+        const data = JSON.parse(e.data);
+        showNotification('success', `${data.part_no} 已被 ${data.acceptor} 接单`);
+        playSound('success');
+      });
+      
+      sseConnection.addEventListener('call_done', function(e) {
+        const data = JSON.parse(e.data);
+        showNotification('success', `📦 ${data.part_no} 已备妥，请前往 ${data.line_pos} 领取`);
+        playSound('success');
+      });
+      
+      sseConnection.addEventListener('call_cancelled', function(e) {
+        const data = JSON.parse(e.data);
+        showNotification('warning', `${data.part_no} 呼叫已取消`);
+      });
+    }
+    
+    function showNotification(type, message) {
+      const notification = document.getElementById('notification');
+      const content = document.getElementById('notificationContent');
+      notification.className = 'notification show ' + type;
+      content.textContent = message;
+      
+      setTimeout(() => {
+        notification.classList.remove('show');
+      }, 5000);
+    }
+    
+    function showCallModal() {
+      document.getElementById('callModal').classList.add('show');
+      document.getElementById('callPartNo').focus();
+    }
+    
+    function hideCallModal() {
+      document.getElementById('callModal').classList.remove('show');
+      document.getElementById('callPartNo').value = '';
+      document.getElementById('callLotNo').value = '';
+      document.getElementById('callQty').value = '1';
+      document.getElementById('callNote').value = '';
+    }
+    
+    async function submitCall() {
+      const partNo = document.getElementById('callPartNo').value.trim();
+      const lotNo = document.getElementById('callLotNo').value.trim();
+      const qty = parseInt(document.getElementById('callQty').value) || 1;
+      const linePos = document.getElementById('callLinePos').value;
+      const priority = document.getElementById('callPriority').value;
+      const note = document.getElementById('callNote').value.trim();
+      
+      if (!partNo) {
+        showNotification('error', '请输入料号');
+        return;
+      }
+      
+      try {
+        const response = await fetch(`${config.serverUrl}/api/call`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            part_no: partNo,
+            lot_no: lotNo || null,
+            qty: qty,
+            line_pos: linePos,
+            caller: config.user?.real_name || config.user?.username || '未知',
+            priority: priority,
+            note: note || null
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          showNotification('success', `已呼叫备料：${partNo} ${qty}卷`);
+          addRecord('success', `呼叫备料成功：${partNo}`);
+          playSound('success');
+          hideCallModal();
+        } else {
+          showNotification('error', data.message || '呼叫失败');
+          addRecord('error', `呼叫失败：${data.message}`);
+          playSound('error');
+        }
+      } catch (err) {
+        showNotification('error', '呼叫失败: ' + err.message);
+        addRecord('error', `呼叫失败：${err.message}`);
+        playSound('error');
+      }
     }
     
     async function loadRecords() {
